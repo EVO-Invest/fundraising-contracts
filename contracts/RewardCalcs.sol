@@ -22,10 +22,6 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
         // Number as a nominator for 1000 with denom. So 50 = 5%.
         uint16 commissionOverride;
 
-        // Commission which is held from this particular client.
-        // Number as a nominator for 1000 with denom. So 50 = 5%.
-        // uint16 commissionOverride;
-
         // Who invited the user. Should be a top-level wallet.
         address referrer;
     }
@@ -57,6 +53,8 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
 
     // Snapshot ids increase monotonically, with the first value being 1. An id of 0 is invalid.
     CountersUpgradeable.Counter private _currentSnapshotId;
+
+    mapping(bytes32 => address) _refAliases;
 
     function initialize(address gateway, address snapshotManager, UnionWallet unionwallet)
         external
@@ -139,11 +137,24 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
         return (referrerCommission, referrer);
     }
 
-    function setReferral(address user, address referral) public {
-        require(user != referral, "Self-referring is not allowed");
+    function setReferral(address user, string memory referralAlias) public {
         require(msg.sender == _gateway || msg.sender == owner(), "setReferral: wrong caller");
+
+        address referral = _refAliases[keccak256(bytes(referralAlias))];
+        user = _unionwallet.resolveIdentity(user);
+        require(referral != address(0), "Referral alias does not exist");
+        require(user != referral, "Self-referring is not allowed");
         require(_refInfos[user].referrer == address(0x0) || msg.sender == owner(), "onlyOwner can update ref");
-        _refInfos[user] = ReferralCommissionInfo(0, referral);
+        _refInfos[user] = ReferralCommissionInfo(_refInfos[user].commissionOverride, referral);
+    }
+
+    function setReferralAlias(string memory al) external {
+        bytes32 aliasHash = keccak256(bytes(al));
+        require(_refAliases[aliasHash] == address(0), "Alias already exists");
+        _refAliases[aliasHash] = _unionwallet.resolveIdentity(msg.sender);
+    }
+    function checkReferralAliasExists(string memory al) external view returns (bool) {
+        return _refAliases[keccak256(bytes(al))] != address(0);
     }
 
     function _valueAt(uint256 snapshotId, TeamRewardsSnapshots storage snapshots) private view returns (bool, uint16, TeamMemberRewardTypeChoice) {

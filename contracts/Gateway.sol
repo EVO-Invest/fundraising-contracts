@@ -20,16 +20,41 @@ contract Gateway is EIP712Upgradeable, OwnableUpgradeable {
         rewards = _rewards;
     }
 
-    function setRef(address newUser, address referral, uint8 v, bytes32 r, bytes32 s) public {
+    function setRef_ru(string memory referralAlias, uint8 v, bytes32 r, bytes32 s) external {
+        bytes32 hash = ECDSAUpgradeable.toEthSignedMessageHash(abi.encodePacked(
+            bytes(unicode"Я разрешаю подключение к платформе EVO Invest x "),
+            referralAlias
+        ));
+        address signer = ECDSAUpgradeable.recover(hash, v, r, s);
+        require(signer != address(0x0), "setRef: invalid signature 2");
+
+        rewards.setReferral(signer, referralAlias);
+    }
+
+    function setRef_en(string memory referralAlias, uint8 v, bytes32 r, bytes32 s) external {
+        bytes32 hash = ECDSAUpgradeable.toEthSignedMessageHash(abi.encodePacked(
+            bytes(unicode"I authorize connection to EVO Invest x "),
+            referralAlias
+        ));
+        address signer = ECDSAUpgradeable.recover(hash, v, r, s);
+        require(signer != address(0x0), "setRef: invalid signature 2");
+
+        rewards.setReferral(signer, referralAlias);
+    }
+
+    /*
+    function setRef(address newUser, string memory referralAlias, uint8 v, bytes32 r, bytes32 s) public {
         bytes32 hash = _hashTypedDataV4(keccak256(abi.encode(
             keccak256("setRef(address newUser,address referral)"),
             newUser,
-            referral
+            referralAlias
         )));
+
         address signer = ECDSAUpgradeable.recover(hash, v, r, s);
         require(signer == newUser, "setRef: invalid signature");
         require(signer != address(0x0), "setRef: invalid signature 2");
 
-        rewards.setReferral(newUser, referral);
+        rewards.setReferral(newUser, referralAlias);
     }
+    */
 }

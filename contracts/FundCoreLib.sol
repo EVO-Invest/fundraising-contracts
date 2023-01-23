@@ -102,4 +102,8 @@ library FundCoreLib {
     function getTotalCollected(FundMath storage data) internal view returns (uint256) {
         return data.collected;
     }
+
+    function getAllocationsGiven(FundMath storage data) internal view returns (uint256) {
+        return data.allocationsGiven;
+    }
 }
