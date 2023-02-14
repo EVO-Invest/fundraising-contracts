@@ -202,7 +202,7 @@ contract RootOfPools_v2 is Initializable, OwnableUpgradeable {
     function checkAllClaims(address user) external view returns (uint256) {
         uint256 temp;
         for (uint256 i; i < Pools.length; i++) {
-            temp += (BranchOfPools(Pools[i].pool).myCurrentAllocation(user));
+            temp += (BranchOfPools(Pools[i].pool).myAllocation(user));
         }
 
         return temp;

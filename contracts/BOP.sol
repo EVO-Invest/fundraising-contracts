@@ -12,6 +12,8 @@ import "./RewardCalcs.sol";
 import "./UnionWallet.sol";
 import "./FundCoreLib.sol";
 
+import "hardhat/console.sol";
+
 /// @title The pool's subsidiary contract for fundraising.
 /// This contract collects funds, distributes them, and charges fees
 /// @author Nethny
@@ -44,8 +46,8 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     // Total amount of token we already distributed.
     // So that token.balanceOf(this) + _DISTRIBUTED_TOKEN = amount of received token.
     uint256 public _DISTRIBUTED_TOKEN;
-    bool _ownerAlreadyCollectedFunds;
-    bool _firstClaimHappened;
+    bool public _ownerAlreadyCollectedFunds;
+    bool public _firstClaimHappened;
 
     /* _usdEmergency stores the original amount of funds deposited,
        no commissions, no nothing. So that in case of emergency,
@@ -59,11 +61,13 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     address public _devUSDAddress;
     uint256 public _unlockTime;
     uint256 _defaultCommission;
-    uint256 public _totalReferalDeductions;
 
     FundCoreLib.FundMath _fundMath;
     RewardCalcs _rewardCalcs;
     UnionWallet _unionWallet;
+
+    uint256 private _rankingDenom;
+    mapping(address => uint256) _issuedTokensForUnionWallet;
 
     // choice = true | onlyState modifier
     // choice = false | onlyNotState modifier
@@ -71,6 +75,9 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
         require(choice ? _state == state : _state != state, "BOP: State error!");
         _;
     }
+
+    /// @notice Occurs when user deposits money and ref receives theirs share.
+    event RefReward(address ref, address user, uint256 amount);
 
     /// @notice Assigns the necessary values to the variables
     /// @dev Just a constructor
@@ -113,6 +120,8 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
 
         _defaultCommission = Ranking(RootOfPools_v2(_root)._rankingAddress())
             .getParRankOfUser(address(0x0))[2];
+
+        _rankingDenom = 10000;
     }
 
     function updateFundraisingTarget(uint256 fundraisingTarget) internal {
@@ -148,6 +157,12 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
                 _fundMath.takeSalary(user)
             );
         }
+    }
+
+    function claimableSalary() external view returns (bool timeOK, uint256 expectedAmount) {
+        timeOK = (_firstClaimHappened || (block.timestamp >= _unlockTime));
+        address user = _unionWallet.resolveIdentity(tx.origin);
+        expectedAmount = _fundMath.getSalaryAmount(user);
     }
 
     /// @notice Changes the target amount of funds we collect
@@ -219,11 +234,11 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
                 "DEPOSIT: Wrong amount!");
 
         _usdEmergency[user] += amount;
-        uint256 totalCommissions = amount * /* CommissionPrc=*/ rank[2] / 10000;  // rank = 1500 -> 0.15 -> 15%, 125 -> 0.0125 -> 1.25%
+        uint256 totalCommissions = amount * /* CommissionPrc=*/ rank[2] / _rankingDenom;  // rank = 1500 -> 0.15 -> 15%, 125 -> 0.0125 -> 1.25%
         _fundMath.onDepositInputTokens(user, amount - totalCommissions, totalCommissions);
-        (uint256 referralCommission, address referral) = _rewardCalcs.calculateReferralsCommission(user, amount, totalCommissions, amount * _defaultCommission / 100);
+        (uint256 referralCommission, address referral) = _rewardCalcs.calculateReferralsCommission(user, amount, totalCommissions, amount * _defaultCommission / _rankingDenom);
         _fundMath.updateInputTokenSalary(referral, 0, referralCommission);
-        _totalReferalDeductions += referralCommission;
+        emit RefReward(referral, user, referralCommission);
     }
 
     function preSend(uint256 amount)
@@ -248,12 +263,16 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     {
         uint256 remainingPayment = _fundMath.requiredAmountToCloseFundraising();
         _usd.transferFrom(_root.owner(), address(this), remainingPayment);
-        _fundMath.closeFundraising(remainingPayment, owner());
+        _fundMath.closeFundraising(remainingPayment, _root.owner());
         _state = State.WaitingToken;
     }
 
     function requiredAmountToCloseFundraising() external view stateCheck(State.Fundraising, true) returns (uint256) {
         return _fundMath.requiredAmountToCloseFundraising();
+    }
+
+    function estimateOwnersProfit() external view stateCheck(State.Fundraising, true) returns (uint256) {
+        return _fundMath.estimateOwnersProfit();
     }
 
     /// @notice Allows developers to transfer tokens for distribution to contributors
@@ -283,6 +302,12 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
         _DISTRIBUTED_TOKEN += amount;
         require(_token.transfer(tx.origin, amount));
         _firstClaimHappened = true;
+        _issuedTokensForUnionWallet[user] += amount;
+    }
+
+    function _issuedTokens(address account) external view returns (uint256) {
+        address user = _unionWallet.resolveIdentity(account);
+        return _issuedTokensForUnionWallet[user];
     }
 
     function stateSameOrAfter(State s) public view returns (bool) {
@@ -315,7 +340,7 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
 
     /// @notice Returns the number of tokens the user can take at the moment
     /// @param user - address user
-    function myCurrentAllocation(address user) public view returns (uint256) {
+    function myAllocation(address user) public view returns (uint256) {
         user = _unionWallet.resolveIdentity(user);
         if (_state != State.TokenDistribution)
             return 0;
@@ -325,7 +350,7 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     /// @notice Auxiliary function for RootOfPools claimAll
     /// @param user - address user
     function isClaimable(address user) external view returns (bool) {
-        return myCurrentAllocation(user) > 0;
+        return myAllocation(user) > 0;
     }
 
     function _VALUE() external view returns (uint256) {

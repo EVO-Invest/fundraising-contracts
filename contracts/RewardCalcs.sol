@@ -65,8 +65,8 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
         _gateway = gateway;
         _unionwallet = unionwallet;
         _snapshotManager = snapshotManager;
-        _defaultReferralCommission = 30;  // 3%
-        _denominator = 1000;
+        _defaultReferralCommission = 300;  // 3%
+        _denominator = 10000;
     }
 
     function setDefaultCommission(uint16 newValue) external onlyOwner {
@@ -77,6 +77,10 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
     function setCommissionForReferrer(address referrer, uint16 newValue) external onlyOwner {
         require(newValue <= _denominator, "nom>denom");
         _refInfos[referrer].commissionOverride = newValue;
+    }
+
+    function getCommissionForReferrer(address referrer) external view returns (uint16) {
+        return (_refInfos[referrer].commissionOverride != 0) ? _refInfos[referrer].commissionOverride : _defaultReferralCommission; 
     }
 
     function snapshotTeam() public returns (uint256) {
@@ -118,7 +122,7 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
             _denominator;
         
         // Some depositors may have 0% commissions. We are not paying to referrers in this case.
-        if (referrerCommission < commission) referrerCommission = commission;
+        if (referrerCommission > commission) referrerCommission = commission;
 
         // If the referrer is special and user is special referrer's commission is decuded
         // by the amount of difference between normal and not normal user
@@ -155,6 +159,11 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
     }
     function checkReferralAliasExists(string memory al) external view returns (bool) {
         return _refAliases[keccak256(bytes(al))] != address(0);
+    }
+    function reverseAlias(string memory al) external view returns (address) {
+        address result = _refAliases[keccak256(bytes(al))];
+        require(result != address(0));
+        return result;
     }
 
     function _valueAt(uint256 snapshotId, TeamRewardsSnapshots storage snapshots) private view returns (bool, uint16, TeamMemberRewardTypeChoice) {
@@ -212,7 +221,7 @@ contract RewardCalcs is Initializable, OwnableUpgradeable {
 
     function addTeamMember(address user, uint16 commission, TeamMemberRewardTypeChoice choice) external onlyOwner {
         require(_team.add(user), "Already exists");
-        _updateSnapshot(_teamRewardsSnapshots[user], 0, TeamMemberRewardTypeChoice.TOKEN);
+        _updateSnapshot(_teamRewardsSnapshots[user], commission, choice);
         _teamRewards[user] = TeamRewards(commission, choice);
     }
     function updateTeamMember(address user, uint16 commission) external onlyOwner {
