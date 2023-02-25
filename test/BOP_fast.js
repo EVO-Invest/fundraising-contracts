@@ -339,9 +339,10 @@ describe("BOP QuickCheck", function () {
         const stopFundraisingTxData = await bopImage.populateTransaction.stopFundraising()
         await rop.Calling("First Pool", stopFundraisingTxData.data)
 
-	const ownerBalanceBeforeOwnersCommissions = await usdt.balanceOf(admin.address);
-	// await (await getDirectPoolAccess()).getCommission();
 	await sendToTeam("700");
+
+	const ownerBalanceBeforeOwnersCommissions = await usdt.balanceOf(admin.address);
+	await (await getDirectPoolAccess()).getCommission();
 	const ownerBalanceAfterOwnersCommissions = await usdt.balanceOf(admin.address);
 	expect(ownerBalanceAfterOwnersCommissions.sub(ownerBalanceBeforeOwnersCommissions).toString())
 	    .to.be.eq((totalCollected - totalLiabilities) + "000000");
