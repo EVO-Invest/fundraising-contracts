@@ -141,6 +141,13 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     }
 
     function getCommission() public {
+        if (!_ownerAlreadyCollectedFunds && _preSend == _fundMath.getFundraisingTarget()) {
+            _ownerAlreadyCollectedFunds = true;
+            _usd.transfer(
+                _root.owner(),
+                _fundMath.ownersShare()
+            );
+        }
         if (_firstClaimHappened || (block.timestamp >= _unlockTime)) {
             address user = _unionWallet.resolveIdentity(tx.origin);
             // Ref. payments are also treates as salary by our depositing code.
@@ -243,14 +250,6 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
         require(amount + _preSend <= _fundMath.getAllocationsGiven());
         _preSend += amount;
         _usd.transfer(_devUSDAddress, amount);
-
-        if (!_ownerAlreadyCollectedFunds && _preSend == _fundMath.getFundraisingTarget()) {
-            _ownerAlreadyCollectedFunds = true;
-            _usd.transfer(
-                _root.owner(),
-                _fundMath.ownersShare()
-            );
-        }
     }
 
     /// @notice Closes the fundraiser and distributes the funds raised
