@@ -46,6 +46,7 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     // Total amount of token we already distributed.
     // So that token.balanceOf(this) + _DISTRIBUTED_TOKEN = amount of received token.
     uint256 public _DISTRIBUTED_TOKEN;
+    bool public _ownerAlreadyCollectedFunds;
     bool public _firstClaimHappened;
 
     /* _usdEmergency stores the original amount of funds deposited,
@@ -106,6 +107,7 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
         _stepValue = Step * _decimals;
         _devUSDAddress = devUSDAddress;
         _unlockTime = unlockTime;
+        _ownerAlreadyCollectedFunds = false;
         _firstClaimHappened = false;
 
         __Ownable_init();
@@ -139,6 +141,14 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
     }
 
     function getCommission() public {
+        if (stateSameOrAfter(State.WaitingToken) && !_ownerAlreadyCollectedFunds) {
+            _ownerAlreadyCollectedFunds = true;
+            _usd.transfer(
+                _root.owner(),
+                _fundMath.ownersShare()
+            );
+        }
+
         if (_firstClaimHappened || (block.timestamp >= _unlockTime)) {
             address user = _unionWallet.resolveIdentity(tx.origin);
             // Ref. payments are also treates as salary by our depositing code.
@@ -250,16 +260,11 @@ contract BranchOfPools is Initializable, OwnableUpgradeable {
         stateCheck(State.Paused, false)
         stateCheck(State.TokenDistribution, false)
         stateCheck(State.Emergency, false)
-        stateCheck(State.WaitingToken, false)
     {
         uint256 remainingPayment = _fundMath.requiredAmountToCloseFundraising();
         _usd.transferFrom(_root.owner(), address(this), remainingPayment);
         _fundMath.closeFundraising(remainingPayment, _root.owner());
         _state = State.WaitingToken;
-        _usd.transfer(
-            _root.owner(),
-            _fundMath.ownersShare()
-        );
     }
 
     function requiredAmountToCloseFundraising() external view stateCheck(State.Fundraising, true) returns (uint256) {

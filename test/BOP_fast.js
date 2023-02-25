@@ -337,14 +337,14 @@ describe("BOP QuickCheck", function () {
 
         // No one can add any more at this point. Time to close pool.
         const stopFundraisingTxData = await bopImage.populateTransaction.stopFundraising()
+        await rop.Calling("First Pool", stopFundraisingTxData.data)
+
         // Now, the protocol owner can take comissions.
         const ownerBalanceBeforeOwnersCommissions = await usdt.balanceOf(admin.address);
-        await rop.Calling("First Pool", stopFundraisingTxData.data)
+        await (await getDirectPoolAccess()).getCommission();
         const ownerBalanceAfterOwnersCommissions = await usdt.balanceOf(admin.address);
         expect(ownerBalanceAfterOwnersCommissions.sub(ownerBalanceBeforeOwnersCommissions).toString())
             .to.be.eq((totalCollected - totalLiabilities) + "000000");
-
-        // await (await getDirectPoolAccess()).getCommission();
 
         // Refovod and team can't.
         await takeAndCheckCommission(0, "0")
